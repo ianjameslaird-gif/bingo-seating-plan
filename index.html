@@ -97,7 +97,7 @@ main{display:block;padding:0}#mapwrap{border:1px solid #000;height:auto;min-heig
 <dialog id="dlg"><form method="dialog" id="dform"><div class="mh"><div class="bigball" id="dNum"></div><div style="flex:1;min-width:0"><input id="dName" class="tname" placeholder="Table name (optional, e.g. VIP)" aria-label="Table name"><div class="note" id="dFill"></div></div><button value="close" aria-label="Close">✕</button></div>
 <div class="mb"><div id="dSecs"></div>
 <div class="row" style="grid-template-columns:1fr auto"><input id="dNew" placeholder="Type a new guest name to seat here" aria-label="New guest name"><button type="button" id="dAddNew">Add &amp; seat</button></div>
-<div class="note">Edits save instantly. Size uses the higher number of a range (6-8 → 8 seats). Split a section to make 15 → 15 + 15A.</div></div>
+<div class="note">Edits save instantly. Size uses the higher number of a range (6-8 → 8 seats). Type names straight into seats; clearing a seat moves that guest to the unseated list. Split a section to make 15 → 15 + 15A.</div></div>
 <div class="mf"><button type="button" id="dClear" class="danger">Clear table</button><button type="button" id="dMergeAll">Merge all sections</button><button value="close" class="pri">Done</button></div></form></dialog>
 <div class="toast" id="toast"></div>
 <script>
@@ -260,7 +260,7 @@ function fillDlg(){const t=S.tables[cur];if(!t)return;document.getElementById('d
  document.getElementById('dFill').textContent=`Table ${t.sections.map(s=>lab(cur,s)).join(' + ')} · ${tFill(t)}/${tSeats(t)} seats filled`;
  document.getElementById('dMergeAll').hidden=t.sections.length<2;
  const box=document.getElementById('dSecs');const act=document.activeElement&&document.activeElement.id;box.innerHTML='';
- const free=S.guests.filter(g=>!where(g.id)).sort((a,b)=>a.name.localeCompare(b.name));
+
  t.sections.forEach((s,si)=>{const L=lab(cur,s);const sec=mk('section',{className:'sec'});
   const hd=mk('div',{className:'sechd'});hd.append(mk('span',{className:'minib',textContent:L}));
   const st=mk('div',{className:'step'});
@@ -276,10 +276,16 @@ function fillDlg(){const t=S.tables[cur];if(!t)return;document.getElementById('d
   acts.append(sp);
   if(si>0){const mg=mk('button',{type:'button',textContent:`Merge ${L} into ${cur}`});mg.onclick=()=>{const over=merge(cur,si);render();fillDlg();toast(over.length?`No room – back to guest list: ${over.join(', ')}`:`${L} merged into ${cur}`)};acts.append(mg)}
   sec.append(hd);
-  s.seats.forEach((id,i)=>{const r=mk('div',{className:'seat'});const sel=mk('select');sel.setAttribute('aria-label',`Table ${L} seat ${i+1}`);
-   sel.add(new Option(id?'— clear seat —':'— empty —',''));if(id)sel.add(new Option(gname(id),id,true,true));
-   free.forEach(g=>sel.add(new Option(g.name,g.id)));sel.onchange=()=>{assign(cur,si,i,sel.value?+sel.value:null);render();fillDlg()};
-   r.append(mk('span',{textContent:'#'+(i+1)}),sel);sec.appendChild(r)});
+  s.seats.forEach((id,i)=>{const r=mk('div',{className:'seat'});
+   const inp=mk('input',{type:'text',id:`seat-${si}-${i}`,value:id?gname(id):'',placeholder:'Type a name…',autocomplete:'off',spellcheck:false});
+   inp.setAttribute('autocomplete','off');inp.setAttribute('aria-label',`Table ${L} seat ${i+1} name`);
+   const upd=()=>{const v=inp.value.trim(),cid=s.seats[i];
+    if(cid){if(v){const g=S.guests.find(g=>g.id===cid);if(g)g.name=v}else s.seats[i]=null}
+    else if(v){const g=addGuest(v);s.seats[i]=g.id}
+    render();document.getElementById('dFill').textContent=`Table ${S.tables[cur].sections.map(x=>lab(cur,x)).join(' + ')} · ${tFill(S.tables[cur])}/${tSeats(S.tables[cur])} seats filled`;};
+   inp.oninput=upd;inp.onblur=()=>{inp.value=s.seats[i]?gname(s.seats[i]):''};
+   inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();const nx=document.getElementById(`seat-${si}-${i+1}`);(nx||inp).focus();if(!nx)inp.blur()}};
+   r.append(mk('span',{textContent:'#'+(i+1)}),inp);sec.appendChild(r)});
   if(!s.seats.length)sec.appendChild(mk('p',{className:'note',textContent:'No seats – use + to add.'}));
   sec.append(acts);box.appendChild(sec);});
  if(act&&document.getElementById(act))document.getElementById(act).focus();}
