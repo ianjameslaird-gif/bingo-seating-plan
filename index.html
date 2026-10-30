@@ -48,6 +48,14 @@ textarea{width:100%;background:#0f0a1c;border:1px solid var(--line);border-radiu
 .dance{animation:glow 3s ease-in-out infinite alternate}
 @keyframes glow{to{filter:drop-shadow(0 0 22px #ff2fb3) brightness(1.15)}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.tname{font-weight:800;font-size:18px;background:transparent;border:1px dashed var(--line);min-height:36px;padding:4px 8px}
+.sec{border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:10px;display:grid;gap:8px;background:#120c20}
+.sec+.sec{border-color:var(--mag);box-shadow:0 0 10px #ff2fb333}
+.sechd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.minib{min-width:44px;height:44px;padding:0 6px;border-radius:22px;display:grid;place-items:center;font-weight:900;color:#1a0a00;background:radial-gradient(circle at 30% 25%,#fff3d0 0 5%,#ffd56a 14%,var(--amber) 40%,#9a5a00)}
+.step{display:flex;gap:4px;align-items:center}.step input{width:84px;text-align:center}.step button{width:40px;padding:0;font-size:20px;font-weight:700}
+.secacts{display:flex;gap:8px;flex-wrap:wrap}
+.shl{stroke:var(--amber);stroke-width:4;animation:pulse 1s infinite}
 /* modal */
 dialog{background:var(--panel);color:var(--txt);border:1px solid var(--mag);border-radius:18px;padding:0;width:min(520px,94vw);max-height:90vh;box-shadow:0 0 40px #ff2fb355}
 dialog::backdrop{background:#05020bcc;backdrop-filter:blur(3px)}
@@ -86,11 +94,11 @@ main{display:block;padding:0}#mapwrap{border:1px solid #000;height:auto;min-heig
 <ul id="glist"></ul>
 <p class="note">Saves automatically on this device only. To move the plan to another device, use <b>Export</b> then <b>Import</b>, or send a <b>share link</b>.</p></aside></main>
 <div id="printlist"></div>
-<dialog id="dlg"><form method="dialog" id="dform"><div class="mh"><div class="bigball" id="dNum"></div><div><div id="dHead" style="font-weight:800;font-size:18px"></div><div class="note" id="dFill"></div></div><button value="close" style="margin-left:auto" aria-label="Close">✕</button></div>
-<div class="mb"><div class="row"><label>Table name (optional)<input id="dName" placeholder="e.g. VIP"></label><label>Seating / group size<input id="dCap" placeholder="e.g. 10-12 or 6"></label></div>
-<div class="note">Seat count uses the higher number of a range (6-8 → 8 seats).</div><div id="dSeats" class="mb" style="padding:0"></div>
-<div class="row" style="grid-template-columns:1fr auto"><input id="dNew" placeholder="New guest name" aria-label="New guest name"><button type="button" id="dAddNew">Add &amp; seat</button></div></div>
-<div class="mf"><button type="button" id="dClear" class="danger">Clear table</button><button value="close" class="pri">Done</button></div></form></dialog>
+<dialog id="dlg"><form method="dialog" id="dform"><div class="mh"><div class="bigball" id="dNum"></div><div style="flex:1;min-width:0"><input id="dName" class="tname" placeholder="Table name (optional, e.g. VIP)" aria-label="Table name"><div class="note" id="dFill"></div></div><button value="close" aria-label="Close">✕</button></div>
+<div class="mb"><div id="dSecs"></div>
+<div class="row" style="grid-template-columns:1fr auto"><input id="dNew" placeholder="Type a new guest name to seat here" aria-label="New guest name"><button type="button" id="dAddNew">Add &amp; seat</button></div>
+<div class="note">Edits save instantly. Size uses the higher number of a range (6-8 → 8 seats). Split a section to make 15 → 15 + 15A.</div></div>
+<div class="mf"><button type="button" id="dClear" class="danger">Clear table</button><button type="button" id="dMergeAll">Merge all sections</button><button value="close" class="pri">Done</button></div></form></dialog>
 <div class="toast" id="toast"></div>
 <script>
 "use strict";
@@ -102,27 +110,50 @@ const LAYOUT=[[55,'r',482,168,'6-8'],[52,'r',564,168,'4'],[51,'r',658,168,'4'],[
 [23,'s',466,614,'8-10'],[22,'s',548,614,'12-14'],[21,'s',632,614,'13-15'],[46,'r',228,560,'4'],[45,'r',284,634,'6-8'],[44,'r',354,668,'4'],
 [2,'s',804,384,'6'],[1,'s',810,464,'6'],[41,'r',664,830,'4'],[43,'r',616,890,'4'],[42,'r',664,890,'4']];
 const KEY='bingoSeating.v1';
-const def=()=>({title:'Bingo Night - Seating Plan',guests:[],tables:Object.fromEntries(LAYOUT.map(l=>[l[0],{cap:l[4],name:'',seats:[]}])),nid:1});
+const SUF='ABCDEFGH';
+const def=()=>({v:2,title:'Bingo Night - Seating Plan',guests:[],tables:Object.fromEntries(LAYOUT.map(l=>[l[0],{name:'',sections:[{suf:'',cap:l[4],seats:[]}]}])),nid:1});
 let S=load()||def();
 function seatsOf(cap){const m=String(cap).match(/\d+/g);if(!m)return 0;return Math.min(60,Math.max(...m.map(Number)));}
-function norm(){for(const l of LAYOUT){if(!S.tables[l[0]])S.tables[l[0]]={cap:l[4],name:'',seats:[]};}
+// migrate v1 {cap,seats} -> v2 {sections:[...]} and sanitise
+function norm(){S.v=2;S.guests=Array.isArray(S.guests)?S.guests.filter(g=>g&&typeof g.id==='number'):[];S.tables=S.tables||{};
+ for(const l of LAYOUT){if(!S.tables[l[0]])S.tables[l[0]]={name:'',sections:[{suf:'',cap:l[4],seats:[]}]};}
  const ids=new Set(S.guests.map(g=>g.id)),used=new Set();
- for(const k in S.tables){const t=S.tables[k];const n=seatsOf(t.cap);t.seats=(t.seats||[]).slice(0,n).map(x=>(x&&ids.has(x)&&!used.has(x))?(used.add(x),x):null);while(t.seats.length<n)t.seats.push(null);}
+ for(const k in S.tables){const t=S.tables[k];
+  if(!Array.isArray(t.sections)||!t.sections.length){t.sections=[{suf:'',cap:t.cap??'4',seats:t.seats||[]}];}
+  delete t.cap;delete t.seats;t.name=t.name||'';t.sections[0].suf='';
+  for(const s of t.sections){s.cap=String(s.cap??'0');const n=seatsOf(s.cap);
+   s.seats=(s.seats||[]).slice(0,n).map(x=>(x&&ids.has(x)&&!used.has(x))?(used.add(x),x):null);while(s.seats.length<n)s.seats.push(null);}}
  S.nid=Math.max(S.nid||1,...S.guests.map(g=>g.id+1),1);}
-function load(){try{const h=location.hash.match(/^#p=(.+)/);if(h)return null;return JSON.parse(localStorage.getItem(KEY));}catch(e){return null}}
+function load(){try{if(/^#p=/.test(location.hash))return null;return JSON.parse(localStorage.getItem(KEY));}catch(e){return null}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
-function where(id){for(const k in S.tables)if(S.tables[k].seats.includes(id))return k;return null}
+const lab=(n,s)=>n+s.suf;
+function where(id){for(const k in S.tables){const t=S.tables[k];for(let i=0;i<t.sections.length;i++)if(t.sections[i].seats.includes(id))return{num:k,si:i,label:lab(k,t.sections[i])}}return null}
 const gname=id=>(S.guests.find(g=>g.id===id)||{}).name||'';
-function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),2200)}
+const tSeats=t=>t.sections.reduce((a,s)=>a+s.seats.length,0),tFill=t=>t.sections.reduce((a,s)=>a+s.seats.filter(Boolean).length,0);
+const tCap=t=>t.sections.length>1?t.sections.map(s=>s.cap).join(' + '):t.sections[0].cap;
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),2600)}
 function addGuest(name){name=name.trim();if(!name)return null;const g={id:S.nid++,name};S.guests.push(g);return g}
-// Resize a table; overflow guests are unseated (go back to guest list), never deleted. Returns names unseated.
-function setCap(num,cap){const t=S.tables[num];const n=seatsOf(cap);t.cap=String(cap).trim();
- const people=t.seats.filter(Boolean);const keep=people.slice(0,n),over=people.slice(n);
- // compact: keep existing seat positions where possible
- let seats=t.seats.slice(0,n);const inSeats=new Set(seats.filter(Boolean));const lost=keep.filter(x=>!inSeats.has(x));
+// Resize a section; overflow guests are unseated (stay on guest list). Returns names unseated.
+function setCap(num,si,cap){const s=S.tables[num].sections[si];const n=seatsOf(cap);s.cap=String(cap).trim();
+ const people=s.seats.filter(Boolean),keep=people.slice(0,n),over=people.slice(n);
+ const seats=s.seats.slice(0,n),inS=new Set(seats.filter(Boolean)),lost=keep.filter(x=>!inS.has(x));
  for(let i=0;i<seats.length&&lost.length;i++)if(!seats[i])seats[i]=lost.shift();
- while(seats.length<n)seats.push(null);t.seats=seats;return over.map(gname);}
-function assign(num,i,id){if(id){const w=where(id);if(w){const s=S.tables[w].seats;s[s.indexOf(id)]=null}}S.tables[num].seats[i]=id||null}
+ while(seats.length<n)seats.push(null);s.seats=seats;return over.map(gname);}
+function assign(num,si,i,id){if(id){const w=where(id);if(w){const s=S.tables[w.num].sections[w.si].seats;s[s.indexOf(id)]=null}}S.tables[num].sections[si].seats[i]=id||null}
+// Split section si in two: first half of seat slots stays, second half (with its guests) goes to new section.
+function split(num,si){const t=S.tables[num];if(t.sections.length>=SUF.length+1)return null;const s=t.sections[si],n=s.seats.length;
+ const used=new Set(t.sections.map(x=>x.suf));const suf=[...SUF].find(c=>!used.has(c));
+ let a=Math.ceil(n/2),b=n-a;if(n<2){a=n;b=Math.max(1,n)}
+ const moved=s.seats.slice(a);const ns={suf,cap:String(b),seats:moved.concat(Array(Math.max(0,b-moved.length)).fill(null)).slice(0,b)};
+ s.seats=s.seats.slice(0,a);s.cap=String(a);
+ t.sections.splice(si+1,0,ns);t.sections.sort((x,y)=>x.suf.localeCompare(y.suf));return lab(num,ns);}
+// Merge section si (>0) into the main section: guests fill free seats there, the rest are unseated. Returns names unseated.
+function merge(num,si){const t=S.tables[num];if(si<1||!t.sections[si])return[];const [s]=t.sections.splice(si,1),main=t.sections[0];
+ const people=s.seats.filter(Boolean),over=[];
+ // grow main by the removed section's size so the combined capacity is preserved
+ const want=main.seats.length+s.seats.length;main.cap=String(want);while(main.seats.length<want)main.seats.push(null);
+ for(const p of people){const k=main.seats.indexOf(null);if(k<0)over.push(p);else main.seats[k]=p}
+ return over.map(gname);}
 // ---------- render map ----------
 const svg=document.getElementById('map'),NS='http://www.w3.org/2000/svg';
 function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e}
@@ -173,7 +204,7 @@ function drawStatic(){svg.innerHTML='';
  for(const [num,type,x,y] of LAYOUT){const g=el('g',{class:'tbl',tabindex:0,role:'button','data-n':num,transform:`translate(${x} ${y})`},T);
   g.addEventListener('click',()=>openT(num));g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openT(num)}});
   if(type==='r')el('circle',{r:24,class:'shape ring','stroke-width':3},g);else el('rect',{x:-24,y:-24,width:48,height:48,rx:8,class:'shape ring','stroke-width':3},g);
-  el('circle',{r:16,class:'ball',fill:'#fff'},g);txt(num,{y:6,'text-anchor':'middle','font-size':16,'font-weight':900,fill:'#111'},g);
+  el('circle',{r:16,class:'ball',fill:'#fff'},g);txt(num,{class:'num',y:6,'text-anchor':'middle','font-size':16,'font-weight':900,fill:'#111'},g);el('g',{class:'secs'},g);
   txt('',{class:'cap',y:-32,'text-anchor':'middle','font-size':14,'font-weight':700,fill:'#fff4d6'},g);
   txt('',{class:'fill',y:43,'text-anchor':'middle','font-size':13,'font-weight':700},g);
   txt('',{class:'nm',y:58,'text-anchor':'middle','font-size':12,fill:'#21e6ff'},g);
@@ -182,62 +213,89 @@ function drawStatic(){svg.innerHTML='';
 function render(){norm();save();
  const ti=document.getElementById('title');ti.value=S.title;ti.style.width=(S.title.length*0.78+1)+'em';document.title=S.title;
  const q=document.getElementById('search').value.trim().toLowerCase();
- const hits=q?new Set(S.guests.filter(g=>g.name.toLowerCase().includes(q)).map(g=>where(g.id)).filter(Boolean)):new Set();
+ const hw=q?S.guests.filter(g=>g.name.toLowerCase().includes(q)).map(g=>where(g.id)).filter(Boolean):[];
+ const hits=new Set(hw.map(w=>w.num)),hitL=new Set(hw.map(w=>w.label));
  let seated=0;
- svg.querySelectorAll('.tbl').forEach(g=>{const n=g.dataset.n,t=S.tables[n],c=t.seats.filter(Boolean).length,tot=t.seats.length;seated+=c;
+ svg.querySelectorAll('.tbl').forEach(g=>{const n=g.dataset.n,t=S.tables[n],c=tFill(t),tot=tSeats(t);seated+=c;
   const col=c===0?'#6b5a92':c>=tot?'#38f28a':'#ffb627';
   const sh=g.querySelector('.shape');sh.setAttribute('fill','#1c1530');sh.setAttribute('stroke',col);sh.style.filter=c?`drop-shadow(0 0 6px ${col})`:'';
-  g.querySelector('.ball').setAttribute('fill',c===0?'#d9d2ee':col);
-  g.querySelector('.cap').textContent=t.cap;const f=g.querySelector('.fill');f.textContent=`${c}/${tot}`;f.setAttribute('fill',col);
+  const ball=g.querySelector('.ball'),num=g.querySelector('.num'),sg=g.querySelector('.secs');sg.innerHTML='';
+  const split=t.sections.length>1;ball.style.display=num.style.display=split?'none':'';
+  if(split){const k=t.sections.length,w=Math.max(48,k*36),r=k>2?14:16;sh.setAttribute('width',w);sh.setAttribute('x',-w/2);
+   if(sh.tagName==='circle')sh.setAttribute('r',Math.max(24,w/2));
+   t.sections.forEach((s,i)=>{const x=-w/2+w*(i+.5)/k,sc=s.seats.filter(Boolean).length,cc=sc===0?'#d9d2ee':sc>=s.seats.length?'#38f28a':'#ffb627';
+    if(i)el('line',{x1:-w/2+w*i/k,x2:-w/2+w*i/k,y1:-22,y2:22,stroke:'#ff2fb3','stroke-width':2,'stroke-dasharray':'3 3'},sg);
+    const b=el('circle',{cx:x,r,fill:cc,class:'ball'+(hitL.has(lab(n,s))?' shl':'')},sg);
+    txt(lab(n,s),{x,y:4,'text-anchor':'middle','font-size':k>2?11:12.5,'font-weight':900,fill:'#111'},sg);});
+  }else{sh.setAttribute('width',48);sh.setAttribute('x',-24);if(sh.tagName==='circle')sh.setAttribute('r',24);}
+  ball.setAttribute('fill',c===0?'#d9d2ee':col);
+  g.querySelector('.cap').textContent=tCap(t);const f=g.querySelector('.fill');f.textContent=`${c}/${tot}`;f.setAttribute('fill',col);
   g.querySelector('.nm').textContent=t.name.length>16?t.name.slice(0,15)+'…':t.name;
-  g.querySelector('title').textContent=`Table ${n}${t.name?' – '+t.name:''}: ${c}/${tot}`;
-  g.setAttribute('aria-label',`Table ${n}${t.name?' '+t.name:''}, seating ${t.cap}, ${c} of ${tot} filled`);
+  const lbl=t.sections.map(s=>lab(n,s)).join(' + ');
+  g.querySelector('title').textContent=`Table ${lbl}${t.name?' – '+t.name:''}: ${c}/${tot}`;
+  g.setAttribute('aria-label',`Table ${lbl}${t.name?' '+t.name:''}, seating ${tCap(t)}, ${c} of ${tot} filled`);
   g.classList.toggle('hl',hits.has(n));});
  const tot=S.guests.length;
- document.getElementById('stats').innerHTML=`<b>${seated}</b>/${tot} guests seated · <b>${tot-seated}</b> unseated${q?` · ${hits.size?'match at table '+[...hits].join(', '):'no seated match'}`:''}`;
+ document.getElementById('stats').innerHTML=`<b>${seated}</b>/${tot} guests seated · <b>${tot-seated}</b> unseated${q?` · ${hitL.size?'match at table '+[...hitL].join(', '):'no seated match'}`:''}`;
  document.getElementById('gstats').innerHTML=`${tot} guests · <b>${seated}</b> seated · <b>${tot-seated}</b> unseated`;
  renderList();renderPrint();}
 function renderList(){const ul=document.getElementById('glist'),f=document.getElementById('gfilter').value.trim().toLowerCase(),only=document.getElementById('onlyUn').checked;
  ul.innerHTML='';for(const g of [...S.guests].sort((a,b)=>a.name.localeCompare(b.name))){const w=where(g.id);if(only&&w)continue;if(f&&!g.name.toLowerCase().includes(f))continue;
   const li=document.createElement('li');const i=document.createElement('input');i.value=g.name;i.setAttribute('aria-label','Rename '+g.name);
-  i.onchange=()=>{const v=i.value.trim();if(v){g.name=v;render()}else i.value=g.name};
-  const tg=document.createElement('button');tg.className='tag'+(w?' s':'');tg.textContent=w?'T'+w:'unseated';tg.title=w?'Open table '+w:'Not seated';if(w)tg.onclick=()=>openT(+w);
-  const x=document.createElement('button');x.className='x danger';x.textContent='✕';x.setAttribute('aria-label','Delete '+g.name);
+  i.onchange=()=>{const v=i.value.trim();if(v){g.name=v;render();if(cur)fillDlg()}else i.value=g.name};
+  const tg=document.createElement('button');tg.type='button';tg.className='tag'+(w?' s':'');tg.textContent=w?'T'+w.label:'unseated';tg.title=w?'Open table '+w.label:'Not seated';if(w)tg.onclick=()=>openT(w.num);
+  const x=document.createElement('button');x.type='button';x.className='x danger';x.textContent='✕';x.setAttribute('aria-label','Delete '+g.name);
   x.onclick=()=>{if(confirm(`Delete ${g.name}?`)){S.guests=S.guests.filter(z=>z.id!==g.id);render();if(cur)fillDlg()}};
   li.append(i,tg,x);ul.appendChild(li);}
  if(!ul.children.length)ul.innerHTML='<li class="note">No guests here yet.</li>';}
 function renderPrint(){const p=document.getElementById('printlist');p.innerHTML='<h2>Table list</h2>';
- for(const [n] of LAYOUT){const t=S.tables[n],names=t.seats.filter(Boolean).map(gname);const d=document.createElement('div');
-  d.innerHTML=`<h3></h3><div></div>`;d.querySelector('h3').textContent=`Table ${n}${t.name?' – '+t.name:''} (${names.length}/${t.seats.length})`;d.querySelector('div').textContent=names.join(', ')||'—';p.appendChild(d);}
+ for(const [n] of LAYOUT){const t=S.tables[n];for(const s of t.sections){const names=s.seats.filter(Boolean).map(gname);const d=document.createElement('div');
+  d.innerHTML=`<h3></h3><div></div>`;d.querySelector('h3').textContent=`Table ${lab(n,s)}${t.name?' – '+t.name:''} (${names.length}/${s.seats.length})`;d.querySelector('div').textContent=names.join(', ')||'—';p.appendChild(d);}}
  const un=S.guests.filter(g=>!where(g.id)).map(g=>g.name);if(un.length){const d=document.createElement('div');d.innerHTML='<h3>Unseated</h3><div></div>';d.lastChild.textContent=un.join(', ');p.appendChild(d)}}
-// ---------- dialog ----------
+// ---------- table panel (everything edits live) ----------
 const dlg=document.getElementById('dlg');let cur=null;
-function openT(n){cur=n;fillDlg();document.getElementById('dName').value=S.tables[n].name;document.getElementById('dCap').value=S.tables[n].cap;if(!dlg.open)dlg.showModal()}
-function fillDlg(){const t=S.tables[cur];document.getElementById('dNum').textContent=cur;
- document.getElementById('dHead').textContent=`Table ${cur}${t.name?' – '+t.name:''}`;
- document.getElementById('dFill').textContent=`${t.seats.filter(Boolean).length}/${t.seats.length} seats filled · seating ${t.cap}`;
- const box=document.getElementById('dSeats');box.innerHTML='';
- if(!t.seats.length)box.innerHTML='<p class="note">Set a seating size (e.g. 6) to add seats.</p>';
+function openT(n){cur=String(n);document.getElementById('dName').value=S.tables[cur].name;fillDlg();if(!dlg.open)dlg.showModal()}
+function mk(tag,props){const e=document.createElement(tag);Object.assign(e,props||{});return e}
+function fillDlg(){const t=S.tables[cur];if(!t)return;document.getElementById('dNum').textContent=t.sections.length>1?cur+'+':cur;
+ document.getElementById('dFill').textContent=`Table ${t.sections.map(s=>lab(cur,s)).join(' + ')} · ${tFill(t)}/${tSeats(t)} seats filled`;
+ document.getElementById('dMergeAll').hidden=t.sections.length<2;
+ const box=document.getElementById('dSecs');const act=document.activeElement&&document.activeElement.id;box.innerHTML='';
  const free=S.guests.filter(g=>!where(g.id)).sort((a,b)=>a.name.localeCompare(b.name));
- t.seats.forEach((id,i)=>{const r=document.createElement('div');r.className='seat';const s=document.createElement('span');s.textContent='#'+(i+1);
-  const sel=document.createElement('select');sel.setAttribute('aria-label',`Seat ${i+1}`);
-  sel.add(new Option(id?'— clear seat —':'— empty —',''));if(id)sel.add(new Option(gname(id),id,true,true));
-  free.forEach(g=>sel.add(new Option(g.name,g.id)));sel.onchange=()=>{assign(cur,i,sel.value?+sel.value:null);render();fillDlg()};
-  r.append(s,sel);box.appendChild(r)});}
-document.getElementById('dName').oninput=e=>{S.tables[cur].name=e.target.value;render();document.getElementById('dHead').textContent=`Table ${cur}${e.target.value?' – '+e.target.value:''}`};
-document.getElementById('dCap').onchange=e=>{const v=e.target.value.trim();if(!v){e.target.value=S.tables[cur].cap;return}
- const over=setCap(cur,v);render();fillDlg();if(over.length)toast(`Moved back to guest list: ${over.join(', ')}`)};
+ t.sections.forEach((s,si)=>{const L=lab(cur,s);const sec=mk('section',{className:'sec'});
+  const hd=mk('div',{className:'sechd'});hd.append(mk('span',{className:'minib',textContent:L}));
+  const st=mk('div',{className:'step'});
+  const minus=mk('button',{type:'button',textContent:'−',ariaLabel:`Fewer seats at ${L}`});
+  const inp=mk('input',{id:'cap'+si,value:s.cap,ariaLabel:`Seating size for table ${L}`,inputMode:'text'});
+  const plus=mk('button',{type:'button',textContent:'+',ariaLabel:`More seats at ${L}`});
+  const apply=v=>{const over=setCap(cur,si,v);render();fillDlg();if(over.length)toast(`Moved back to guest list: ${over.join(', ')}`)};
+  minus.onclick=()=>apply(String(Math.max(0,s.seats.length-1)));plus.onclick=()=>apply(String(Math.min(60,s.seats.length+1)));
+  inp.onchange=()=>{const v=inp.value.trim();if(v)apply(v);else inp.value=s.cap};inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();inp.blur()}};
+  st.append(minus,inp,plus);hd.append(st,mk('span',{className:'note',textContent:`${s.seats.filter(Boolean).length}/${s.seats.length}`}));
+  const acts=mk('div',{className:'secacts'});
+  const sp=mk('button',{type:'button',textContent:`Split ${L}`,title:'Split into two sections'});sp.onclick=()=>{const nl=split(cur,si);render();fillDlg();if(nl)toast(`Split: new section ${nl}`);else toast('Too many sections')};
+  acts.append(sp);
+  if(si>0){const mg=mk('button',{type:'button',textContent:`Merge ${L} into ${cur}`});mg.onclick=()=>{const over=merge(cur,si);render();fillDlg();toast(over.length?`No room – back to guest list: ${over.join(', ')}`:`${L} merged into ${cur}`)};acts.append(mg)}
+  sec.append(hd);
+  s.seats.forEach((id,i)=>{const r=mk('div',{className:'seat'});const sel=mk('select');sel.setAttribute('aria-label',`Table ${L} seat ${i+1}`);
+   sel.add(new Option(id?'— clear seat —':'— empty —',''));if(id)sel.add(new Option(gname(id),id,true,true));
+   free.forEach(g=>sel.add(new Option(g.name,g.id)));sel.onchange=()=>{assign(cur,si,i,sel.value?+sel.value:null);render();fillDlg()};
+   r.append(mk('span',{textContent:'#'+(i+1)}),sel);sec.appendChild(r)});
+  if(!s.seats.length)sec.appendChild(mk('p',{className:'note',textContent:'No seats – use + to add.'}));
+  sec.append(acts);box.appendChild(sec);});
+ if(act&&document.getElementById(act))document.getElementById(act).focus();}
+document.getElementById('dName').oninput=e=>{S.tables[cur].name=e.target.value;render()};
 function addSeat(){const i=document.getElementById('dNew'),t=S.tables[cur];const v=i.value.trim();if(!v)return;
- let k=t.seats.indexOf(null);if(k<0){toast('Table is full – increase seating size first');return}
- const g=addGuest(v);t.seats[k]=g.id;i.value='';render();fillDlg();i.focus();}
+ for(const s of t.sections){const k=s.seats.indexOf(null);if(k>=0){const g=addGuest(v);s.seats[k]=g.id;i.value='';render();fillDlg();i.focus();return}}
+ toast('Table is full – press + to add a seat first');}
 document.getElementById('dAddNew').onclick=addSeat;document.getElementById('dNew').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();addSeat()}};
-document.getElementById('dClear').onclick=()=>{if(confirm('Unseat everyone at this table? (They stay on the guest list.)')){S.tables[cur].seats=S.tables[cur].seats.map(()=>null);render();fillDlg()}};
+document.getElementById('dClear').onclick=()=>{if(confirm('Unseat everyone at this table? (They stay on the guest list.)')){S.tables[cur].sections.forEach(s=>s.seats=s.seats.map(()=>null));render();fillDlg()}};
+document.getElementById('dMergeAll').onclick=()=>{let over=[];while(S.tables[cur].sections.length>1)over=over.concat(merge(cur,S.tables[cur].sections.length-1));render();fillDlg();toast(over.length?`No room – back to guest list: ${over.join(', ')}`:'Sections merged')};
 dlg.addEventListener('close',()=>{cur=null});
 dlg.addEventListener('click',e=>{if(e.target===dlg)dlg.close()});
 // ---------- controls ----------
 document.getElementById('title').onchange=e=>{S.title=e.target.value.trim()||'Bingo Night - Seating Plan';render()};
 document.getElementById('bAdd').onclick=()=>{const b=document.getElementById('bulk');const names=b.value.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean);names.forEach(addGuest);b.value='';render();toast(`Added ${names.length} guest${names.length==1?'':'s'}`)};
-['search'].forEach(id=>document.getElementById(id).oninput=render);
+document.getElementById('search').oninput=render;
 document.getElementById('gfilter').oninput=renderList;document.getElementById('onlyUn').onchange=renderList;
 document.getElementById('bExport').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));a.download='seating-plan.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 document.getElementById('bImport').onclick=()=>document.getElementById('file').click();
