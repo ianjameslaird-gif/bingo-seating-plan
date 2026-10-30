@@ -1,5 +1,12 @@
-# Bingo Night – Seating Plan
+# Bingo Night Seating Plan
 
-Editable seating plan. Open: https://ianjameslaird-gif.github.io/bingo-seating-plan/
+Editable venue seating plan for bingo night. Open the live site, or open `index.html` locally.
 
-Tap a table to assign guests from drop-downs and edit its seating size. Saves on your device; use Export/Import or "Copy share link" to move a plan between devices.
+## Share with a coworker
+- Use **Export** / **Import** (JSON), or **Copy share link** (state is packed into the URL hash).
+- Autosave uses `localStorage` (per browser / device).
+
+## Features
+- Tap a table to assign guests via dropdowns
+- Edit seating / group size (e.g. change `12-14` to `6`)
+- Guest list, search, print/PDF, dark bingo-night theme
