@@ -347,20 +347,21 @@ function unflat(f){const o=def();o.guests=[];const tb={};
     if(a[3]==='suf')x.suf=String(v);else if(a[3]==='cap')x.cap=String(v);else if(a[3][0]==='s')x.seats[+a[3].slice(1)]=Number(v)}}}
  for(const k in tb){const t=tb[k];t.sections=t.sections.filter(Boolean);t.sections.forEach(x=>{x.seats=Array.from(x.seats,v=>v||null)});if(t.sections.length)o.tables[k]=t}
  o.nid=Math.max(1,...o.guests.map(g=>g.id+1));return o}
-var Sync=(()=>{let tree=null,live=false,es=null,pend={},inflight=false,tmr=null,applying=false,seeded=false,dirty=false;
+var Sync=(()=>{let tree=null,live=false,es=null,pend={},inflight=false,tmr=null,applying=false,seeded=false,base=null;try{pend=JSON.parse(localStorage.getItem(KEY+'.pend'))||{}}catch(_){}
  const badge=on=>{live=on;const b=document.getElementById('live');b.textContent=on?'● Live':'● Offline';b.classList.toggle('on',on);b.title=on?'Edits sync live with everyone on this link':'Not connected – edits are saved on this device and will sync when back online'};
  const server=()=>walk(tree,'',{});
- function local(){if(applying)return;if(!tree){dirty=true;return}const F=flat(S),R=Object.assign(server(),pend);
+ const keep=()=>{try{localStorage.setItem(KEY+'.pend',JSON.stringify(pend))}catch(_){}};
+ function local(){if(applying)return;const F=flat(S);if(!base&&!tree){base=F;return}const R=Object.assign(tree?server():{...base},pend);
   for(const k in F)if(R[k]!==F[k])pend[k]=F[k];for(const k in R)if(!(k in F)&&R[k]!==null)pend[k]=null;
-  clearTimeout(tmr);tmr=setTimeout(flush,120)}
- async function flush(){if(inflight||!Object.keys(pend).length)return;inflight=true;const body=pend;pend={};
+  keep();if(!tree)return;clearTimeout(tmr);tmr=setTimeout(flush,120)}
+ async function flush(){if(inflight||!tree||!Object.keys(pend).length)return;inflight=true;const body=pend;pend={};
   try{const r=await fetch(RURL+'.json',{method:'PATCH',body:JSON.stringify(body)});if(!r.ok)throw 0}
   catch(e){for(const k in body)if(!(k in pend))pend[k]=body[k];badge(false);setTimeout(flush,3000)}
-  inflight=false;if(Object.keys(pend).length)flush()}
+  inflight=false;keep();if(Object.keys(pend).length)flush()}
  function setAt(path,data){const a=path.split('/').filter(Boolean);if(!a.length){tree=data;return}
   if(!tree||typeof tree!=='object')tree={};let o=tree;for(let i=0;i<a.length-1;i++){if(!o[a[i]]||typeof o[a[i]]!=='object')o[a[i]]={};o=o[a[i]]}
   if(data===null)delete o[a.at(-1)];else o[a.at(-1)]=data}
- function apply(){if(dirty){dirty=false;local()}const F=Object.assign(server(),pend);for(const k in F)if(F[k]===null)delete F[k];
+ function apply(){const F=Object.assign(server(),pend);for(const k in F)if(F[k]===null)delete F[k];
   const ae=document.activeElement,fid=ae&&ae.id,val=ae&&ae.value,ss=ae&&ae.selectionStart,se=ae&&ae.selectionEnd,sx=document.querySelector('aside')?.scrollTop;
   applying=true;try{S=unflat(F);if(cur&&!S.tables[cur])cur=null;render();if(cur&&dlg.open){const dn=document.getElementById('dName');if(fid!=='dName')dn.value=S.tables[cur].name;fillDlg()}}finally{applying=false}
   if(fid){const e=document.getElementById(fid);if(e){if(e!==document.activeElement)e.focus({preventScroll:true});if(typeof val==='string'&&e.value!==val)e.value=val;try{e.setSelectionRange(ss,se)}catch(_){}}}
