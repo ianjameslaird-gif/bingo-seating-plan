@@ -103,7 +103,7 @@ main{display:block;padding:0}#mapwrap{border:1px solid #000;height:auto;min-heig
 <script>
 "use strict";
 // [num, type, x, y, defaultCap]  types: r=round, s=square, b=booth
-const LAYOUT=[[55,'r',482,168,'6-8'],[52,'r',564,168,'4'],[51,'r',658,168,'4'],[54,'r',354,154,'4'],[53,'r',284,214,'4'],[56,'r',226,280,'4'],
+const LAYOUT=[[55,'r',482,168,'6-8'],[52,'r',564,168,'4'],[51,'r',658,168,'4'],[54,'r',354,154,'4'],[53,'r',284,214,'6/8 pax'],[56,'r',226,280,'4'],
 [26,'s',464,250,'8-10'],[27,'s',544,250,'12-14'],[28,'s',632,250,'13-15'],[14,'s',504,334,'10-12'],[15,'s',588,334,'10-12'],
 [36,'s',110,330,'4-5'],[35,'s',110,388,'3-4'],[34,'s',110,460,'3-4'],[33,'s',110,520,'4-5'],[32,'s',190,384,'8-10'],[31,'s',190,470,'8-10'],
 [25,'s',334,380,'7-8'],[24,'s',334,488,'7-8'],[13,'s',418,434,'6-7'],[12,'s',504,518,'10-12'],[11,'s',588,518,'10-12'],
@@ -111,16 +111,16 @@ const LAYOUT=[[55,'r',482,168,'6-8'],[52,'r',564,168,'4'],[51,'r',658,168,'4'],[
 [2,'s',804,384,'6'],[1,'s',810,464,'6'],[41,'r',664,830,'4'],[43,'r',616,890,'4'],[42,'r',664,890,'4']];
 const KEY='bingoSeating.v1';
 const SUF='ABCDEFGH';
-const def=()=>({v:2,title:'Bingo Night - Seating Plan',guests:[],tables:Object.fromEntries(LAYOUT.map(l=>[l[0],{name:'',sections:[{suf:'',cap:l[4],seats:[]}]}])),nid:1});
+const def=()=>({v:3,title:'Bingo Night - Seating Plan',guests:[],tables:Object.fromEntries(LAYOUT.map(l=>[l[0],{name:'',sections:[{suf:'',cap:l[4],seats:[]}]}])),nid:1});
 let S=load()||def();
 function seatsOf(cap){const m=String(cap).match(/\d+/g);if(!m)return 0;return Math.min(60,Math.max(...m.map(Number)));}
 // migrate v1 {cap,seats} -> v2 {sections:[...]} and sanitise
-function norm(){S.v=2;S.guests=Array.isArray(S.guests)?S.guests.filter(g=>g&&typeof g.id==='number'):[];S.tables=S.tables||{};
+function norm(){const pv=S.v||1;S.v=3;S.guests=Array.isArray(S.guests)?S.guests.filter(g=>g&&typeof g.id==='number'):[];S.tables=S.tables||{};
  for(const l of LAYOUT){if(!S.tables[l[0]])S.tables[l[0]]={name:'',sections:[{suf:'',cap:l[4],seats:[]}]};}
  const ids=new Set(S.guests.map(g=>g.id)),used=new Set();
  for(const k in S.tables){const t=S.tables[k];
   if(!Array.isArray(t.sections)||!t.sections.length){t.sections=[{suf:'',cap:t.cap??'4',seats:t.seats||[]}];}
-  delete t.cap;delete t.seats;t.name=t.name||'';t.sections[0].suf='';
+  delete t.cap;delete t.seats;t.name=t.name||'';if(pv<3&&k==='53'&&t.sections.length===1&&t.sections[0].cap==='4')t.sections[0].cap='6/8 pax';t.sections[0].suf='';
   for(const s of t.sections){s.cap=String(s.cap??'0');const n=seatsOf(s.cap);
    s.seats=(s.seats||[]).slice(0,n).map(x=>(x&&ids.has(x)&&!used.has(x))?(used.add(x),x):null);while(s.seats.length<n)s.seats.push(null);}}
  S.nid=Math.max(S.nid||1,...S.guests.map(g=>g.id+1),1);}
